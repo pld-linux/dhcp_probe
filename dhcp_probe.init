@@ -42,6 +42,7 @@ stop() {
 		return
 	fi
 	for nic in $INTERFACES; do
+		msg_stopping "dhcp_probe on $nic"
 		killproc --pidfile /var/run/dhcp_probe.$nic.pid dhcp_probe
 	done
 	rm -f /var/lock/subsys/dhcp_probe >/dev/null 2>&1
@@ -53,9 +54,9 @@ reload(){
 	done
 }
 
-status() {
+status_f() {
 	for nic in $INTERFACES; do
-		status --pidfile /var/run/dhcp_probe.$nic.pid dhcp_probe -HUP
+		status --pidfile /var/run/dhcp_probe.$nic.pid "dhcp_probe on $nic"
 	done
 }
 
@@ -78,10 +79,11 @@ case "$1" in
 	stop
 	;;
   status)
-	status
+	status_f
 	;;
   restart|force-reload)
-	restart
+	stop
+	start
 	;;
   reload)
 	reload	
