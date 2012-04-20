@@ -1,0 +1,129 @@
+##dhcp-probe-03-drop-privs.patch - add option to change uid after setup
+--- src/dhcp_probe.c.02	2009-08-16 12:31:22.000000000 +0300
++++ src/dhcp_probe.c	2009-08-16 13:47:29.000000000 +0300
+@@ -26,6 +26,9 @@
+ #include "report.h"
+ #include "utils.h"
+ 
++#include <sys/types.h>
++#include <pwd.h>
++
+ #ifndef lint
+ static const char rcsid[] = "dhcp_probe version " VERSION;
+ static const char copyright[] = "Copyright 2000-2008, The Trustees of Princeton University.  All rights reserved.";
+@@ -50,6 +53,8 @@
+ int snaplen = CAPTURE_BUFSIZE;
+ int socket_receive_timeout_feature = 0;
+ int keep_pcap = 0;
++int drop_privs = 0;
++char *username = NULL;
+ 
+ char *prog = NULL;
+ char *logfile_name = NULL;
+@@ -179,6 +184,40 @@
+ 	return packets_recv;
+ }
+ 
++/* drop privileges */
++void 
++drop_privileges(const char *username)
++{
++	struct passwd *pw;
++	pw = getpwnam(username);
++	if (pw == NULL) {
++		report(LOG_ERR, "getpwnam: %s", get_errmsg());
++		my_exit(1, 1, 1);
++	}
++	if (debug > 1)
++		report(LOG_INFO, "changing to uid %d gid %d", pw->pw_uid, pw->pw_gid);
++	
++	if (setregid(pw->pw_gid, pw->pw_gid)) {
++		report(LOG_ERR, "setregid: %s", get_errmsg());
++		my_exit(1, 1, 1);
++	}
++	if (setreuid(pw->pw_uid, pw->pw_uid)) {
++		report(LOG_ERR, "setreuid: %s", get_errmsg());
++		my_exit(1, 1, 1);
++	}
++}
++
++void write_pidfile(void)
++{
++	FILE *pid_fp;
++	if ((pid_fp = open_for_writing(pid_file)) == NULL) {
++		report(LOG_ERR, "could not open pid file %s for writing", pid_file);
++		my_exit(1, 0, 1);
++	} else {
++		fprintf(pid_fp, "%d\n", (int) getpid());
++		fclose(pid_fp);
++	}
++}
+ 
+ int 
+ main(int argc, char **argv)
+@@ -188,7 +227,6 @@
+ 	extern char *optarg;
+ 	extern int optind, opterr, optopt;
+ 	struct sigaction sa;
+-	FILE *pid_fp;
+ 	char *cwd = CWD;
+ 
+ 	int write_packet_len;
+@@ -208,7 +246,7 @@
+ 	else 
+ 		prog = argv[0];
+ 
+-	while ((c = getopt(argc, argv, "c:d:fhkl:o:p:Q:s:Tvw:")) != EOF) {
++	while ((c = getopt(argc, argv, "c:d:fhkl:o:p:Q:s:Tu:vw:")) != EOF) {
+ 		switch (c) {
+ 			case 'c':
+ 				if (optarg[0] != '/') {
+@@ -283,6 +321,10 @@
+ 				}
+ 				break;
+ 			}
++			case 'u':
++				drop_privs = 1;
++				username = optarg;
++				break;
+ 			case 'T':
+ 				socket_receive_timeout_feature = 1;
+ 				break;
+@@ -351,16 +393,6 @@
+ 		my_exit(1, 0, 1);
+ 	}
+ 
+-
+-	/* write pid file as soon as possible after (possibly) forking */
+-	if ((pid_fp = open_for_writing(pid_file)) == NULL) {
+-		report(LOG_ERR, "could not open pid file %s for writing", pid_file);
+-		my_exit(1, 0, 1);
+-	} else {
+-		fprintf(pid_fp, "%d\n", (int) getpid());
+-		fclose(pid_fp);
+-	}
+-
+ 	if (! read_configfile(config_file)) {
+ 		my_exit(1, 1, 1);
+ 	}
+@@ -535,6 +567,12 @@
+ 	if (keep_pcap)
+ 		init_pcap(need_promiscuous(), netmask);
+ 
++	if (drop_privs)
++		drop_privileges(username);
++
++	/* write the pid file after dropping privileges to be able to remove it later */
++	write_pidfile();
++
+ 	while (1) { /* MAIN EVENT LOOP */
+ 		libnet_t *l;						/* to iterate through libnet context queue */
+ 		/* struct pcap_stat ps;	*/			/* to hold pcap stats */
+@@ -1189,6 +1227,7 @@
+ 	fprintf(stderr, "   -Q vlan_id                     tag outgoing frames with an 802.1Q VLAN ID\n");
+ 	fprintf(stderr, "   -s capture_bufsize             override default capture bufsize [%d]\n", CAPTURE_BUFSIZE);
+ 	fprintf(stderr, "   -T                             enable the socket receive timeout feature\n");
++	fprintf(stderr, "   -u username                    change uid after setup (use with -k\n");
+ 	fprintf(stderr, "   -v                             display version number then exit\n");
+ 	fprintf(stderr, "   -w cwd                         override default working directory [%s]\n", CWD);
+ 	fprintf(stderr, "   interface_name                 name of ethernet interface\n");

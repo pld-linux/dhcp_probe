@@ -1,0 +1,19 @@
+# To set-up a new interface do the following (for example eth0):
+#
+# ln -s /lib/systemd/system/dhcp_probe@.service \
+#		/etc/systemd/system/network.target.wants/dhcp_probe@eth0.service
+# or
+# cp -a /lib/systemd/system/dhcp_probe@.service \
+#		/etc/systemd/system/network.target.wants/dhcp_probe@eth0.service
+# if you have to edit this service
+#
+[Unit]
+Description=Start dhcp_probe on %I
+After=network.target
+Wants=network.target
+
+[Service]
+Type=forking
+EnvironmentFile=-/etc/sysconfig/dhcp_probe
+PIDFile=/var/run/dhcp_probe.%I.pid
+ExecStart=/usr/sbin/dhcp_probe $DHCP_PROBE_OPTIONS -p /var/run/dhcp_probe.%I.pid %I

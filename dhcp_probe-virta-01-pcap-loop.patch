@@ -1,0 +1,164 @@
+##dhcp-probe-01-pcap-loop.patch - wrap pcap_dispatch in a loop
+--- src/dhcp_probe.c	2009-08-16 12:24:10.000000000 +0300
++++ src/dhcp_probe.c	2009-08-16 11:52:26.000000000 +0300
+@@ -59,6 +59,7 @@
+ volatile sig_atomic_t reopen_log_file; /* for signal handler */
+ volatile sig_atomic_t reopen_capture_file; /* for signal handler */
+ volatile sig_atomic_t quit_requested; /* for signal requested */
++volatile sig_atomic_t alarm_fired; /* for signal requested */
+ 
+ pcap_t *pd = NULL;					/* libpcap - packet capture descriptor used for actual packet capture */
+ pcap_t *pd_template = NULL;			/* libpcap - packet capture descriptor just used as template */
+@@ -74,6 +75,27 @@
+ int use_8021q = 0;
+ int vlan_id = 0;
+ 
++/* capture packets from pcap for timeout seconds */
++int 
++loop_for_packets(int timeout)
++{
++	int packets_recv = 0;
++	
++	alarm_fired = 0;
++	alarm(timeout);
++	
++	do {
++		int pcap_rc = pcap_dispatch(pd, -1, process_response, NULL);
++		if (pcap_rc == -1)
++			report(LOG_ERR, "pcap_dispatch(): %s", pcap_geterr(pd));
++		else if (pcap_rc > 0)
++			packets_recv += pcap_rc;
++	} while(! alarm_fired && !quit_requested);
++	
++	return packets_recv;
++}
++
++
+ int 
+ main(int argc, char **argv)
+ {
+@@ -84,7 +106,6 @@
+ 	struct sigaction sa;
+ 	FILE *pid_fp;
+ 	char *cwd = CWD;
+-	int i;
+ 
+ 	int write_packet_len;
+ 	int bytes_written;
+@@ -98,9 +119,6 @@
+ 	int linktype;
+ 	char pcap_errbuf[PCAP_ERRBUF_SIZE], pcap_errbuf2[PCAP_ERRBUF_SIZE];
+ 
+-	/* for libnet */
+-	char libnet_errbuf[LIBNET_ERRBUF_SIZE];
+-
+ 	/* get progname = last component of argv[0] */
+ 	prog = strrchr(argv[0], '/');
+ 	if (prog)
+@@ -265,6 +283,8 @@
+ 	reread_config_file = 0; /* set by signal handler */
+ 	reopen_log_file = 0; /* set by signal handler */
+ 	reopen_capture_file = 0; /* set by signal handler */
++	quit_requested = 0;
++	alarm_fired = 0;
+ 	
+ 	ifname = strdup(argv[optind]); /* interface name is a required final argument */
+ 
+@@ -332,6 +352,13 @@
+ 		report(LOG_ERR, "sigaction: %s", get_errmsg());
+ 		my_exit(1, 1, 1);
+ 	}
++	sigemptyset(&sa.sa_mask);
++	sa.sa_handler = catcher;
++	sa.sa_flags = 0;
++	if (sigaction(SIGALRM, &sa, NULL) < 0) {
++		report(LOG_ERR, "sigaction: %s", get_errmsg());
++		my_exit(1, 1, 1);
++	}
+ 
+ 
+ 
+@@ -479,8 +506,9 @@
+ 
+ 		for (l = libnet_cq_head(); libnet_cq_last(); l = libnet_cq_next()) { /* write one flavor packet and listen for answers */
+ 
+-			int pcap_rc;
++			int packets_recv;
+ 			int pcap_open_retries;
++			
+ 
+ 			/* We set up for packet capture BEFORE writing our packet, to minimize the delay
+ 			   between our writing and when we are able to start capturing.  (I cannot tell from
+@@ -569,33 +597,16 @@
+ 				report(LOG_DEBUG, "listening for answers for %d milliseconds", GetResponse_wait_time());
+ 
+ 
+-			/* XXX I often find that pcap_dispatch() returns well before the timeout specified earlier.
+-			   I ensure that there's no alarm() still left over before we start, and also ensure we don't
+-			   get interrupted by SIGCHLD (possible since process_response() could fork an alert_program or alert_program2 child).
+-			   But we STILL often return from pcap_dispatch() too soon!
+-			   April 2001: An update to the pcap(3) man page around version 0.6 (?), along with postings 
+-			   on the tcpdump workers mailing list explains what's going on.  The timeout specified in 
+-			   pcap_open_live() isn't a timeout in the sense one might expect.  The pcap_dispatch() call 
+-			   can return sooner than expected (even immediately), or if no packets are received, might 
+-			   never return at all; the behavior is platform-dependant.  I don't have a way to work
+-			   around this issue; it means this program  just won't work reliably (or at all) on some
+-			   platforms.
+-			*/
+-
+-			alarm(0); /* just in case a previous alarm was still left */
+-
+ 			sigemptyset(&new_sigset);
+ 			sigaddset(&new_sigset, SIGCHLD);
+ 			sigprocmask(SIG_BLOCK, &new_sigset, &old_sigset);  /* block SIGCHLD */
+ 
+-			pcap_rc = pcap_dispatch(pd, -1, process_response, NULL);
++			packets_recv = loop_for_packets(GetResponse_wait_time() / 1000);;
+ 
+ 			sigprocmask(SIG_SETMASK, &old_sigset, NULL);  /* unblock SIGCHLD */
+ 
+-			if (pcap_rc < 0)
+-				report(LOG_ERR, "pcap_dispatch(): %s", pcap_geterr(pd));
+-			else if (debug > 10)
+-				report(LOG_DEBUG, "done listening, captured %d packets", pcap_rc);
++			if (debug > 10)
++				report(LOG_DEBUG, "done listening, captured %d packets", packets_recv);
+ 
+ 			/* I was hoping that perhaps pcap_stats() would return a nonzero number of packets dropped when
+ 			   the buffer size specified to pcap_open_live() turns out to be too small -- so we could
+@@ -688,6 +699,7 @@
+ 		pcap_close(pd_template); 
+ 
+ 	my_exit(0, 1, 1);
++	return 0; /* make gcc happy */
+ }
+ 
+ 
+@@ -986,9 +998,6 @@
+ /* Perform all necessary functions to handle a request to reconfigure.
+    Must not be called until after initial configuration is complete.
+ */
+-   
+-	int i;
+-
+ 	if (! read_configfile(config_file)) {
+ 		my_exit(1, 1, 1);
+ 	}
+@@ -1050,8 +1059,14 @@
+ 
+ 	if ((sig == SIGINT) || (sig == SIGTERM) || (sig == SIGQUIT))  { /* quit gracefully */
+ 		quit_requested = 1;
++		 /* pcap wraps the socket read inside a loop, so the signal doesn't
++		    interrupt it without an explicit call to pcap_breakloop */
++		pcap_breakloop(pd);
++		return;
++	} else if (sig == SIGALRM) { /* timer */
++		pcap_breakloop(pd);
++		alarm_fired = 1;
+ 		return;
+-
+ 	} else if (sig == SIGHUP) { /* re-read config file */
+ 		/* Doing the reread while in the signal handler is way too dangerous.
+ 		   We'll do it at the start or end of the next main event loop.
+
+
