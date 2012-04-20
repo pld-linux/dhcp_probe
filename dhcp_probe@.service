@@ -1,12 +1,3 @@
-# To set-up a new interface do the following (for example eth0):
-#
-# ln -s /lib/systemd/system/dhcp_probe@.service \
-#		/etc/systemd/system/network.target.wants/dhcp_probe@eth0.service
-# or
-# cp -a /lib/systemd/system/dhcp_probe@.service \
-#		/etc/systemd/system/network.target.wants/dhcp_probe@eth0.service
-# if you have to edit this service
-#
 [Unit]
 Description=Start dhcp_probe on %I
 After=network.target

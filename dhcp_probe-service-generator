@@ -1,0 +1,10 @@
+#!/bin/sh
+
+[ -f /etc/sysconfig/dhcp_probe ] && . /etc/sysconfig/dhcp_probe
+
+for nic in $INTERFACES; do
+	[ -d /run/systemd/generator/multi-user.target.wants ] || \
+		mkdir -p /run/systemd/generator/multi-user.target.wants
+	ln -s /lib/systemd/system/dhcp_probe@.service \
+		/run/systemd/generator/multi-user.target.wants/dhcp_probe@$nic.service
+done

@@ -2,5 +2,4 @@
 #DHCP_PROBE_OPTIONS=
 
 # Space separated list of interfaces to listen on.
-# Only valid for SysV startup script.
 #INTERFACES="eth0 eth1"

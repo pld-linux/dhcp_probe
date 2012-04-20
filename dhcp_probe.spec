@@ -1,7 +1,7 @@
 Summary:	Tool for discovering DHCP and BootP servers
 Name:		dhcp_probe
 Version:	1.3.0
-Release:	0.2
+Release:	0.3
 License:	GPLv2+ and MIT
 Group:		Applications
 Source0:	http://www.net.princeton.edu/software/dhcp_probe/%{name}-%{version}.tar.gz
@@ -9,6 +9,7 @@ Source0:	http://www.net.princeton.edu/software/dhcp_probe/%{name}-%{version}.tar
 Source1:	%{name}.init
 Source2:	%{name}.sysconfig
 Source3:	dhcp_probe@.service
+Source4:	dhcp_probe-service-generator
 Patch0:		dhcp_probe-guignard-03_implicit_point_conv_bootp.c.patch
 Patch1:		dhcp_probe-guignard-04_linux_32_or_64bits.patch
 Patch2:		dhcp_probe-virta-01-pcap-loop.patch
@@ -59,6 +60,7 @@ install -p %{SOURCE1} $RPM_BUILD_ROOT/etc/rc.d/init.d/dhcp_probe
 install -p %{SOURCE2} $RPM_BUILD_ROOT/etc/sysconfig/dhcp_probe
 install -p %{SOURCE3} $RPM_BUILD_ROOT%{systemdunitdir}/dhcp_probe@.service
 ln -s /dev/null $RPM_BUILD_ROOT%{systemdunitdir}/dhcp_probe.service
+install -p %{SOURCE4} $RPM_BUILD_ROOT/lib/systemd/generators/dhcp_probe-service-generator
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -86,6 +88,7 @@ fi
 %attr(755,root,root) %{_sbindir}/dhcp_probe
 %attr(754,root,root) /etc/rc.d/init.d/dhcp_probe
 %config(noreplace) %verify(not md5 mtime size) /etc/sysconfig/dhcp_probe
+%attr(755,root,root) /lib/systemd/generators/dhcp_probe-service-generator
 %{systemdunitdir}/%{name}.service
 %{systemdunitdir}/%{name}@.service
 %{_mandir}/man5/dhcp_probe.cf.5*
