@@ -1,7 +1,7 @@
 Summary:	Tool for discovering DHCP and BootP servers
 Name:		dhcp_probe
 Version:	1.3.0
-Release:	0.1
+Release:	0.2
 License:	GPLv2+ and MIT
 Group:		Applications
 Source0:	http://www.net.princeton.edu/software/dhcp_probe/%{name}-%{version}.tar.gz
@@ -39,6 +39,11 @@ this tool to locate unauthorized DHCP and BootP servers.
 cp -a extras/README README.extras
 
 %build
+%ifarch %{x8664}
+export CFLAGS="%{rpmcflags} -D__ARCH__=64"
+%else
+export CFLAGS="%{rpmcflags} -D__ARCH__=32"
+%endif
 %configure
 %{__make}
 
@@ -53,6 +58,7 @@ install -p extras/dhcp_probe.cf.sample $RPM_BUILD_ROOT%{_sysconfdir}/dhcp_probe.
 install -p %{SOURCE1} $RPM_BUILD_ROOT/etc/rc.d/init.d/dhcp_probe
 install -p %{SOURCE2} $RPM_BUILD_ROOT/etc/sysconfig/dhcp_probe
 install -p %{SOURCE3} $RPM_BUILD_ROOT%{systemdunitdir}/dhcp_probe@.service
+ln -s /dev/null $RPM_BUILD_ROOT%{systemdunitdir}/dhcp_probe.service
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -80,6 +86,7 @@ fi
 %attr(755,root,root) %{_sbindir}/dhcp_probe
 %attr(754,root,root) /etc/rc.d/init.d/dhcp_probe
 %config(noreplace) %verify(not md5 mtime size) /etc/sysconfig/dhcp_probe
+%{systemdunitdir}/%{name}.service
 %{systemdunitdir}/%{name}@.service
 %{_mandir}/man5/dhcp_probe.cf.5*
 %{_mandir}/man8/dhcp_probe.8*
