@@ -2,4 +2,11 @@
 #DHCP_PROBE_OPTIONS=
 
 # Space separated list of interfaces to listen on.
-#INTERFACES="eth0 eth1"
+#
+# On systems running systemd after updating the list below you have to
+# restart systemd to regenerate dhcp_probe@DEV.service services
+# (systemctl --system daemon-reload), stop and start dhcp_probe.target when
+# removing elements from list or restart dhcp_probe.target when only adding
+# elements (systemctl stop dhcp_probe.target / systemctl restart dhcp_probe.target).
+#
+INTERFACES="eth0"

@@ -1,10 +1,14 @@
 [Unit]
-Description=Start dhcp_probe on %I
-After=network.target
-Wants=network.target
+Description=dhcp_probe on %I
+Requires=dhcp_probe.target
+After=dhcp_probe.target
+PropagateReloadFrom=dhcp_probe.target
 
 [Service]
 Type=forking
 EnvironmentFile=-/etc/sysconfig/dhcp_probe
 PIDFile=/var/run/dhcp_probe.%I.pid
 ExecStart=/usr/sbin/dhcp_probe $DHCP_PROBE_OPTIONS -p /var/run/dhcp_probe.%I.pid %I
+
+[Install]
+WantedBy=dhcp_probe.target

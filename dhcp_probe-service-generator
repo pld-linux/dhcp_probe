@@ -1,10 +1,18 @@
 #!/bin/sh
 
+destunitdir=${1:-/tmp}
+
 [ -f /etc/sysconfig/dhcp_probe ] && . /etc/sysconfig/dhcp_probe
 
+if [ -d $destunitdir/dhcp_probe.target.wants ]; then
+	rm -f $destunitdir/dhcp_probe.target.wants/dhcp_probe@*.service
+else
+	mkdir -p $destunitdir/dhcp_probe.target.wants
+fi
+
 for nic in $INTERFACES; do
-	[ -d /run/systemd/generator/multi-user.target.wants ] || \
-		mkdir -p /run/systemd/generator/multi-user.target.wants
+	[ -L $destunitdir/dhcp_probe.target.wants/dhcp_probe@$nic.service ] && \
+		continue
 	ln -s /lib/systemd/system/dhcp_probe@.service \
-		/run/systemd/generator/multi-user.target.wants/dhcp_probe@$nic.service
+		$destunitdir/dhcp_probe.target.wants/dhcp_probe@$nic.service
 done

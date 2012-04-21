@@ -1,7 +1,7 @@
 Summary:	Tool for discovering DHCP and BootP servers
 Name:		dhcp_probe
 Version:	1.3.0
-Release:	0.3
+Release:	0.6
 License:	GPLv2+ and MIT
 Group:		Applications
 Source0:	http://www.net.princeton.edu/software/dhcp_probe/%{name}-%{version}.tar.gz
@@ -50,7 +50,8 @@ export CFLAGS="%{rpmcflags} -D__ARCH__=32"
 
 %install
 rm -rf $RPM_BUILD_ROOT
-install -d $RPM_BUILD_ROOT{/etc/{sysconfig,rc.d/init.d},%{systemdunitdir}}
+install -d $RPM_BUILD_ROOT{/etc/{sysconfig,rc.d/init.d},%{systemdunitdir}} \
+	$RPM_BUILD_ROOT/lib/systemd/system-generators
 
 %{__make} install \
 	DESTDIR=$RPM_BUILD_ROOT
@@ -60,7 +61,7 @@ install -p %{SOURCE1} $RPM_BUILD_ROOT/etc/rc.d/init.d/dhcp_probe
 install -p %{SOURCE2} $RPM_BUILD_ROOT/etc/sysconfig/dhcp_probe
 install -p %{SOURCE3} $RPM_BUILD_ROOT%{systemdunitdir}/dhcp_probe@.service
 ln -s /dev/null $RPM_BUILD_ROOT%{systemdunitdir}/dhcp_probe.service
-install -p %{SOURCE4} $RPM_BUILD_ROOT/lib/systemd/generators/dhcp_probe-service-generator
+install -p %{SOURCE4} $RPM_BUILD_ROOT/lib/systemd/system-generators/dhcp_probe-service-generator
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -88,7 +89,7 @@ fi
 %attr(755,root,root) %{_sbindir}/dhcp_probe
 %attr(754,root,root) /etc/rc.d/init.d/dhcp_probe
 %config(noreplace) %verify(not md5 mtime size) /etc/sysconfig/dhcp_probe
-%attr(755,root,root) /lib/systemd/generators/dhcp_probe-service-generator
+%attr(755,root,root) /lib/systemd/system-generators/dhcp_probe-service-generator
 %{systemdunitdir}/%{name}.service
 %{systemdunitdir}/%{name}@.service
 %{_mandir}/man5/dhcp_probe.cf.5*
