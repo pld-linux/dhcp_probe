@@ -1,7 +1,7 @@
 Summary:	Tool for discovering DHCP and BootP servers
 Name:		dhcp_probe
 Version:	1.3.0
-Release:	0.6
+Release:	0.7
 License:	GPLv2+ and MIT
 Group:		Applications
 Source0:	http://www.net.princeton.edu/software/dhcp_probe/%{name}-%{version}.tar.gz
