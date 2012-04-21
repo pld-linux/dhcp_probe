@@ -8,8 +8,9 @@ Source0:	http://www.net.princeton.edu/software/dhcp_probe/%{name}-%{version}.tar
 # Source0-md5:	8067e696fbd88120bdcc2ffef4b64da2
 Source1:	%{name}.init
 Source2:	%{name}.sysconfig
-Source3:	dhcp_probe@.service
-Source4:	dhcp_probe-service-generator
+Source3:	dhcp_probe.target
+Source4:	dhcp_probe@.service
+Source5:	dhcp_probe-service-generator
 Patch0:		dhcp_probe-guignard-03_implicit_point_conv_bootp.c.patch
 Patch1:		dhcp_probe-guignard-04_linux_32_or_64bits.patch
 Patch2:		dhcp_probe-virta-01-pcap-loop.patch
@@ -59,9 +60,10 @@ install -d $RPM_BUILD_ROOT{/etc/{sysconfig,rc.d/init.d},%{systemdunitdir}} \
 install -p extras/dhcp_probe.cf.sample $RPM_BUILD_ROOT%{_sysconfdir}/dhcp_probe.cf
 install -p %{SOURCE1} $RPM_BUILD_ROOT/etc/rc.d/init.d/dhcp_probe
 install -p %{SOURCE2} $RPM_BUILD_ROOT/etc/sysconfig/dhcp_probe
-install -p %{SOURCE3} $RPM_BUILD_ROOT%{systemdunitdir}/dhcp_probe@.service
+install -p %{SOURCE3} $RPM_BUILD_ROOT%{systemdunitdir}/dhcp_probe.target
+install -p %{SOURCE4} $RPM_BUILD_ROOT%{systemdunitdir}/dhcp_probe@.service
 ln -s /dev/null $RPM_BUILD_ROOT%{systemdunitdir}/dhcp_probe.service
-install -p %{SOURCE4} $RPM_BUILD_ROOT/lib/systemd/system-generators/dhcp_probe-service-generator
+install -p %{SOURCE5} $RPM_BUILD_ROOT/lib/systemd/system-generators/dhcp_probe-service-generator
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -91,6 +93,7 @@ fi
 %config(noreplace) %verify(not md5 mtime size) /etc/sysconfig/dhcp_probe
 %attr(755,root,root) /lib/systemd/system-generators/dhcp_probe-service-generator
 %{systemdunitdir}/%{name}.service
+%{systemdunitdir}/%{name}.target
 %{systemdunitdir}/%{name}@.service
 %{_mandir}/man5/dhcp_probe.cf.5*
 %{_mandir}/man8/dhcp_probe.8*

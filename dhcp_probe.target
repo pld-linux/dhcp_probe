@@ -1,0 +1,7 @@
+[Unit]
+Description=Start dhcp_probe daemons
+After=network.target
+Wants=network.target
+
+[Install]
+WantedBy=multi-user.target
