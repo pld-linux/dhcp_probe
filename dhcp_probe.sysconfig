@@ -9,4 +9,4 @@
 # removing elements from list or restart dhcp_probe.target when only adding
 # elements (systemctl stop dhcp_probe.target / systemctl restart dhcp_probe.target).
 #
-INTERFACES="eth0"
+#INTERFACES="eth0"
