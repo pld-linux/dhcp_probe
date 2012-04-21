@@ -71,14 +71,14 @@ rm -rf $RPM_BUILD_ROOT
 %post
 /sbin/chkconfig --add %{name}
 %service %{name} restart
-%systemd_reload
+%systemd_post %{name}.target
 
 %preun
 if [ "$1" = "0" ]; then
 	%service -q %{name} stop
 	/sbin/chkconfig --del %{name}
 fi
-%systemd_reload
+%systemd_preun %{name}.target
 
 %postun
 %systemd_reload
