@@ -2,6 +2,9 @@
 
 destunitdir=${1:-/tmp}
 
+# Do nothing if target is disabled
+[ -e /etc/systemd/system/multi-user.target.wants/dhcp_probe.target ] || exit 0
+
 [ -f /etc/sysconfig/dhcp_probe ] && . /etc/sysconfig/dhcp_probe
 
 if [ -d $destunitdir/dhcp_probe.target.wants ]; then
