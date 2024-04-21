@@ -1,7 +1,7 @@
 ##dhcp-probe-02-keep-pcap.patch - add option to keep pcap open all the time
---- src/dhcp_probe.c.01	2009-08-16 11:52:26.000000000 +0300
-+++ src/dhcp_probe.c	2009-08-16 12:31:22.000000000 +0300
-@@ -49,6 +49,7 @@
+--- src/dhcp_probe.c.orig	2021-01-18 20:17:29.000000000 +0100
++++ src/dhcp_probe.c	2024-04-20 21:59:22.184598775 +0200
+@@ -49,6 +49,7 @@ char *capture_file = NULL;
  */
  int snaplen = CAPTURE_BUFSIZE;
  int socket_receive_timeout_feature = 0;
@@ -9,7 +9,7 @@
  
  char *prog = NULL;
  char *logfile_name = NULL;
-@@ -75,6 +76,89 @@
+@@ -75,6 +76,113 @@ struct ether_addr my_eaddr;
  int use_8021q = 0;
  int vlan_id = 0;
  
@@ -30,7 +30,7 @@
 +	return promiscuous;
 +}
 +
-+int init_pcap(int promiscuous, bpf_u_int32 netmask)
++int init_pcap(int promiscuous)
 +{
 +	/* open packet capture descriptor */
 +	/* XXX On Solaris 7, sometimes pcap_open_live() fails with a message like:
@@ -62,7 +62,6 @@
 +		} /* failure */
 +	} while (pcap_open_retries--);
 +	
-+	
 +	if (pcap_errbuf[0] != '\0')
 +		/* even on success, a warning may be produced */
 +		report(LOG_WARNING, "pcap_open_live(%s): succeeded but with warning: %s", ifname, pcap_errbuf);
@@ -70,11 +69,35 @@
 +	/* make sure this interface is ethernet */
 +	linktype = pcap_datalink(pd);
 +	if (linktype != DLT_EN10MB) {
++		/* In libpcap 0.9.8 on Solaris 9 SPARC, this only happened if you pointed us to an interface
++		   that truly had the wrong datalink type.  
++		   It was not a transient error, so we exited.
++		   However, by libpcap version 1.1.1 on Solaris 9 SPARC, this happens from time to time;
++		   pcap_datalink() returns 0, indicating DLT_NULL.  
++		   Perhaps that's a bug introduced after libpcap 0.9.8.
++		   As this seems to be a transient error, we no longer exit, but instead just log the error,
++		   and skip the rest of the current cycle.
++		   A side effect of this change is that when you DO mistakenly point dhcp_probe to
++		   a non-Ethernet interface (the error is not transient), we keep trying instead
++		   of exiting.  If a future libpcap change returns to the old behavior (where the
++		   interface type remains consistent), we should go back to the old behavior of exiting.
++		*/
++		/*
 +		report(LOG_ERR, "interface %s link layer type %d not ethernet", ifname, linktype);
 +		my_exit(1, 1, 1);
++		*/
++		report(LOG_ERR, "interface %s link layer type %d not ethernet, skipping rest of this probe cycle", ifname, linktype);
++		return -1; /* break for (l) ... */
 +	}
 +	/* compile bpf filter to select just udp/ip traffic to udp port bootpc  */
-+	if (pcap_compile(pd, &bpf_code, "udp dst port bootpc", 1, netmask) < 0) {
++	/* Although one would expect frames on an untagged logical network interface to arrive without any 802.1Q tag,
++	   some Ethernet drivers will deliver some frames with an 802.1Q tag in which vlan==0.
++	   This may be because the frame arrived with an 802.1Q tag in which the 802.1p priority was non-zero.
++	   To preserve that priority field, they retain the 802.1Q tag and set the vlan field to 0.
++	   As per spec, a frame received with 802.1Q tag in which vlan == 0 should be treated as an untagged frame. 
++	   So our bpf filter needs to include both untagged and tagged frames.
++	*/
++	if (pcap_compile(pd, &bpf_code, "udp dst port bootpc or (vlan and udp dst port bootpc)", 1, PCAP_NETMASK_UNKNOWN) < 0) {
 +		report(LOG_ERR, "pcap_compile: %s", pcap_geterr(pd));
 +		my_exit(1, 1, 1);
 +	}
@@ -93,22 +116,23 @@
 +reset_pcap() 
 +{
 +	/* close packet capture descriptor */
-+	pcap_close(pd); 
++	pcap_close(pd);
++	pd = NULL;
 +}
 +
- /* capture packets from pcap for timeout seconds */
  int 
- loop_for_packets(int timeout)
-@@ -115,8 +199,6 @@
+ main(int argc, char **argv)
+ {
+@@ -93,8 +201,6 @@ main(int argc, char **argv)
+ 	int receive_and_process_responses_rc;
  
  	/* for libpcap */
- 	bpf_u_int32 netnumber,  netmask;
 -	struct bpf_program bpf_code;
 -	int linktype;
  	char pcap_errbuf[PCAP_ERRBUF_SIZE], pcap_errbuf2[PCAP_ERRBUF_SIZE];
  
  	/* get progname = last component of argv[0] */
-@@ -126,7 +208,7 @@
+@@ -104,7 +210,7 @@ main(int argc, char **argv)
  	else 
  		prog = argv[0];
  
@@ -117,7 +141,7 @@
  		switch (c) {
  			case 'c':
  				if (optarg[0] != '/') {
-@@ -151,6 +233,9 @@
+@@ -129,6 +235,9 @@ main(int argc, char **argv)
  			case 'h':
  				usage();
  				my_exit(0, 0, 0);
@@ -127,19 +151,19 @@
  			case 'l':
  				if (optarg[0] != '/') {
  					fprintf(stderr, "%s: invalid log file '%s', must be an absolute pathname\n", prog, optarg);
-@@ -447,8 +532,10 @@
+@@ -435,8 +544,10 @@ main(int argc, char **argv)
  		}
  	}
  
 +	if (keep_pcap)
-+		init_pcap(need_promiscuous(), netmask);
++		init_pcap(need_promiscuous());
 +
  	while (1) { /* MAIN EVENT LOOP */
 -		int promiscuous;
  		libnet_t *l;						/* to iterate through libnet context queue */
  		/* struct pcap_stat ps;	*/			/* to hold pcap stats */
  
-@@ -489,26 +576,9 @@
+@@ -477,25 +588,9 @@ main(int argc, char **argv)
  		   interface in promiscuous mode as little as possible, since that can affect the host's performance.
  		*/
  
@@ -162,11 +186,10 @@
  
  			int packets_recv;
 -			int pcap_open_retries;
--			
  
  			/* We set up for packet capture BEFORE writing our packet, to minimize the delay
  			   between our writing and when we are able to start capturing.  (I cannot tell from
-@@ -518,54 +588,9 @@
+@@ -505,78 +600,10 @@ main(int argc, char **argv)
  			   we wanted!
  			*/
  
@@ -194,7 +217,10 @@
 -						sleep(PCAP_OPEN_LIVE_RETRY_DELAY); /* before next retry */
 -					}
 -				} /* failure */
--			}
++			if (! keep_pcap) {
++				if (init_pcap(need_promiscuous()))
++					break; /* for l... */
+ 			}
 -			if (pcap_errbuf[0] != '\0')
 -				/* even on success, a warning may be produced */
 -				report(LOG_WARNING, "pcap_open_live(%s): succeeded but with warning: %s", ifname, pcap_errbuf);
@@ -202,11 +228,36 @@
 -			/* make sure this interface is ethernet */
 -			linktype = pcap_datalink(pd);
 -			if (linktype != DLT_EN10MB) {
+-				/* In libpcap 0.9.8 on Solaris 9 SPARC, this only happened if you pointed us to an interface
+-				   that truly had the wrong datalink type.  
+-				   It was not a transient error, so we exited.
+-				   However, by libpcap version 1.1.1 on Solaris 9 SPARC, this happens from time to time;
+-				   pcap_datalink() returns 0, indicating DLT_NULL.  
+-				   Perhaps that's a bug introduced after libpcap 0.9.8.
+-				   As this seems to be a transient error, we no longer exit, but instead just log the error,
+-				   and skip the rest of the current cycle.
+-				   A side effect of this change is that when you DO mistakenly point dhcp_probe to
+-				   a non-Ethernet interface (the error is not transient), we keep trying instead
+-				   of exiting.  If a future libpcap change returns to the old behavior (where the
+-				   interface type remains consistent), we should go back to the old behavior of exiting.
+-				*/
+-				/*
 -				report(LOG_ERR, "interface %s link layer type %d not ethernet", ifname, linktype);
 -				my_exit(1, 1, 1);
+-				*/
+-				report(LOG_ERR, "interface %s link layer type %d not ethernet, skipping rest of this probe cycle", ifname, linktype);
+-				break; /* for (l) ... */
 -			}
+-
 -			/* compile bpf filter to select just udp/ip traffic to udp port bootpc  */
--			if (pcap_compile(pd, &bpf_code, "udp dst port bootpc", 1, netmask) < 0) {
+-			/* Although one would expect frames on an untagged logical network interface to arrive without any 802.1Q tag,
+-			   some Ethernet drivers will deliver some frames with an 802.1Q tag in which vlan==0.
+-			   This may be because the frame arrived with an 802.1Q tag in which the 802.1p priority was non-zero.
+-			   To preserve that priority field, they retain the 802.1Q tag and set the vlan field to 0.
+-			   As per spec, a frame received with 802.1Q tag in which vlan == 0 should be treated as an untagged frame. 
+-			   So our bpf filter needs to include both untagged and tagged frames.
+-			*/
+-			if (pcap_compile(pd, &bpf_code, "udp dst port bootpc or (vlan and udp dst port bootpc)", 1, PCAP_NETMASK_UNKNOWN) < 0) {
 -				report(LOG_ERR, "pcap_compile: %s", pcap_geterr(pd));
 -				my_exit(1, 1, 1);
 -			}
@@ -217,24 +268,21 @@
 -			}
 -			if (socket_receive_timeout_feature)
 -				set_pcap_timeout(pd);
--
-+			if (! keep_pcap)
-+				init_pcap(need_promiscuous(), netmask);
-+				
+ 
  			/* write one packet */
  
- 			if (debug > 10)
-@@ -621,7 +646,8 @@
+@@ -630,8 +657,8 @@ main(int argc, char **argv)
  			 */
  
  			/* close packet capture descriptor */
 -			pcap_close(pd); 
+-			pd = NULL;
 +			if (! keep_pcap)
 +				reset_pcap();
  
- 			/* check for 'quit' request after each packet, since waiting until end of probe cycle
+ 			/* check for 'quit' request after sending each packet, since waiting until end of probe cycle
  			   would impose a substantial delay. */
-@@ -669,7 +695,7 @@
+@@ -679,7 +706,7 @@ main(int argc, char **argv)
  			reconfigure(write_packet_len);
  			reread_config_file = 0;
  		}
@@ -243,7 +291,7 @@
  		/* We allow must signals that come in during our sleep() to interrupt us.  E.g. we want to cut short
  		   our sleep when we're signalled to exit.  But we must block SIGCHLD during our sleep.  That's because
  		   if we forked an alert_program or alert_program2 child above, its termination will likely happen while we're sleeping;
-@@ -684,7 +710,19 @@
+@@ -694,7 +721,21 @@ main(int argc, char **argv)
  		sigaddset(&new_sigset, SIGCHLD);
  		sigprocmask(SIG_BLOCK, &new_sigset, &old_sigset);  /* block SIGCHLD */
  
@@ -254,7 +302,9 @@
 +			   waiting. We shouldn't get any since we don't send any requests
 +			   but this should prevent any buffers from accidentally filling
 +			   with unhandled packets. */
-+			int packets_recv = loop_for_packets(time_to_sleep);
++			int packets_recv = 0, receive_and_process_responses_rc;
++			if ((receive_and_process_responses_rc = receive_and_process_responses(time_to_sleep)) >= 0)
++				packets_recv = receive_and_process_responses_rc;
 +
 +			if (packets_recv && debug > 10)
 +				report(LOG_DEBUG, "captured %d packets while sleeping", packets_recv);
@@ -264,7 +314,7 @@
  
  		sigprocmask(SIG_SETMASK, &old_sigset, NULL);  /* unblock SIGCHLD */
  
-@@ -692,8 +730,10 @@
+@@ -702,8 +743,10 @@ main(int argc, char **argv)
  
  	} /* MAIN EVENT LOOP */
  
@@ -276,7 +326,7 @@
  
  	if (pd_template) /* only used if a capture file requested */
  		pcap_close(pd_template); 
-@@ -1142,6 +1182,7 @@
+@@ -1284,6 +1327,7 @@ usage(void)
  	fprintf(stderr, "   -d debuglevel                  enable debugging at specified level\n");
  	fprintf(stderr, "   -f                             don't fork (only use for debugging)\n");
  	fprintf(stderr, "   -h                             display this help message then exit\n");

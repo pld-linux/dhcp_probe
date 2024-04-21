@@ -1,28 +1,26 @@
 Summary:	Tool for discovering DHCP and BootP servers
 Summary(pl.UTF-8):	Narzędzie do znajdowania serwerów DHCP i BootP
 Name:		dhcp_probe
-Version:	1.3.0
-Release:	3
+Version:	1.3.1
+Release:	1
 License:	GPL v2+ and MIT
 Group:		Applications/Networking
 Source0:	https://www.net.princeton.edu/software/dhcp_probe/%{name}-%{version}.tar.gz
-# Source0-md5:	8067e696fbd88120bdcc2ffef4b64da2
+# Source0-md5:	0fecf69bd0439603b5e3b3f0a652b822
 Source1:	%{name}.init
 Source2:	%{name}.sysconfig
 Source3:	dhcp_probe.target
 Source4:	dhcp_probe@.service
 Source5:	dhcp_probe-service-generator
-Patch0:		dhcp_probe-guignard-03_implicit_point_conv_bootp.c.patch
-Patch1:		dhcp_probe-guignard-04_linux_32_or_64bits.patch
-Patch2:		dhcp_probe-virta-01-pcap-loop.patch
 Patch3:		dhcp_probe-virta-02-keep-pcap.patch
 Patch4:		dhcp_probe-virta-03-drop-privs.patch
 URL:		https://www.net.princeton.edu/software/dhcp_probe/
-BuildRequires:	libnet-devel >= 1:1.1.6
+BuildRequires:	libnet-devel >= 1:1.2
 BuildRequires:	libpcap-devel
 BuildRequires:	rpmbuild(macros) >= 1.647
 Requires(post,preun):	/sbin/chkconfig
 Requires(post,preun,postun):	systemd-units >= 38
+Requires:	libnet >= 1:1.2
 Requires:	rc-scripts
 Requires:	systemd-units >= 38
 BuildRoot:	%{tmpdir}/%{name}-%{version}-root-%(id -u -n)
@@ -40,9 +38,6 @@ oraz BootP.
 
 %prep
 %setup -q
-%patch0 -p0
-%patch1 -p0
-%patch2 -p0
 %patch3 -p0
 %patch4 -p0
 cp -a extras/README README.extras
