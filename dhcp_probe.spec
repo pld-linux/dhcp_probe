@@ -38,8 +38,8 @@ oraz BootP.
 
 %prep
 %setup -q
-%patch3 -p0
-%patch4 -p0
+%patch -P3 -p0
+%patch -P4 -p0
 cp -a extras/README README.extras
 
 %build
